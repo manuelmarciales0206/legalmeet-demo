@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 
-export default function NewCasePage() {
+function NewCaseForm() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -16,7 +16,6 @@ export default function NewCasePage() {
     urgencia: 'MEDIA' as 'BAJA' | 'MEDIA' | 'ALTA',
   });
 
-  // 🆕 Cargar datos del caso si vienen de WhatsApp
   useEffect(() => {
     const dataParam = searchParams.get('data');
     
@@ -54,14 +53,12 @@ export default function NewCasePage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* 🆕 Banner si viene de WhatsApp */}
       {fromWhatsApp && (
         <div className="bg-green-500 text-white px-6 py-3 text-center font-semibold animate-fadeIn">
           ✅ Caso cargado desde WhatsApp - Revisa los datos y continúa
         </div>
       )}
 
-      {/* Header */}
       <header className="bg-white border-b border-gray-200">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between">
@@ -76,11 +73,9 @@ export default function NewCasePage() {
         </div>
       </header>
 
-      {/* Formulario */}
       <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
           <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Título */}
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">
                 Título del caso *
@@ -95,7 +90,6 @@ export default function NewCasePage() {
               />
             </div>
 
-            {/* Categoría */}
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">
                 Categoría legal *
@@ -117,7 +111,6 @@ export default function NewCasePage() {
               </select>
             </div>
 
-            {/* Descripción */}
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">
                 Descripción detallada *
@@ -135,7 +128,6 @@ export default function NewCasePage() {
               </p>
             </div>
 
-            {/* Urgencia */}
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">
                 Nivel de urgencia *
@@ -180,7 +172,6 @@ export default function NewCasePage() {
               </div>
             </div>
 
-            {/* Botón Submit */}
             <div className="pt-6">
               <button
                 type="submit"
@@ -203,7 +194,6 @@ export default function NewCasePage() {
           </form>
         </div>
 
-        {/* Información adicional */}
         <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
           <div className="flex gap-3">
             <div className="text-blue-600 text-xl">ℹ️</div>
@@ -218,5 +208,20 @@ export default function NewCasePage() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function NewCasePage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600">Cargando...</p>
+        </div>
+      </div>
+    }>
+      <NewCaseForm />
+    </Suspense>
   );
 }
