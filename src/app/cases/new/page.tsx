@@ -1,18 +1,45 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { especialidades } from '@/data/mockData';
+import { useEffect, useState } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 
 export default function NewCasePage() {
+  const searchParams = useSearchParams();
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [fromWhatsApp, setFromWhatsApp] = useState(false);
+  
   const [formData, setFormData] = useState({
     titulo: '',
-    descripcion: '',
     categoria: '',
-    urgencia: 'MEDIA',
+    descripcion: '',
+    urgencia: 'MEDIA' as 'BAJA' | 'MEDIA' | 'ALTA',
   });
+
+  // 🆕 Cargar datos del caso si vienen de WhatsApp
+  useEffect(() => {
+    const dataParam = searchParams.get('data');
+    
+    if (dataParam) {
+      try {
+        const caseData = JSON.parse(decodeURIComponent(dataParam));
+        
+        console.log('📲 Datos recibidos de WhatsApp:', caseData);
+        
+        setFormData({
+          titulo: caseData.titulo || '',
+          categoria: caseData.categoria || '',
+          descripcion: caseData.descripcion || '',
+          urgencia: caseData.urgencia || 'MEDIA',
+        });
+        
+        setFromWhatsApp(true);
+        
+      } catch (error) {
+        console.error('❌ Error parsing case data:', error);
+      }
+    }
+  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,168 +54,167 @@ export default function NewCasePage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* 🆕 Banner si viene de WhatsApp */}
+      {fromWhatsApp && (
+        <div className="bg-green-500 text-white px-6 py-3 text-center font-semibold animate-fadeIn">
+          ✅ Caso cargado desde WhatsApp - Revisa los datos y continúa
+        </div>
+      )}
+
+      {/* Header */}
       <header className="bg-white border-b border-gray-200">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center justify-between">
+            <h1 className="text-2xl font-bold text-gray-900">Crear Nuevo Caso</h1>
             <button
               onClick={() => router.back()}
-              className="p-2 hover:bg-gray-100 rounded-lg transition"
+              className="text-gray-600 hover:text-gray-900 font-medium"
             >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
+              ← Volver
             </button>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Crear Nuevo Caso</h1>
-              <p className="text-sm text-gray-600">Cuéntanos sobre tu situación legal</p>
-            </div>
           </div>
         </div>
       </header>
 
+      {/* Formulario */}
       <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
           <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Título */}
             <div>
-              <label htmlFor="titulo" className="block text-sm font-semibold text-gray-900 mb-2">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
                 Título del caso *
               </label>
               <input
-                id="titulo"
                 type="text"
-                placeholder="Ej: Despido injustificado, Divorcio de mutuo acuerdo..."
+                required
                 value={formData.titulo}
                 onChange={(e) => setFormData({ ...formData, titulo: e.target.value })}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
-                required
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Ej: Despido injustificado"
               />
             </div>
 
+            {/* Categoría */}
             <div>
-              <label htmlFor="categoria" className="block text-sm font-semibold text-gray-900 mb-2">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
                 Categoría legal *
               </label>
               <select
-                id="categoria"
+                required
                 value={formData.categoria}
                 onChange={(e) => setFormData({ ...formData, categoria: e.target.value })}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
-                required
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
-                <option value="">Selecciona una especialidad...</option>
-                {especialidades.map((esp) => (
-                  <option key={esp.id} value={esp.nombre}>
-                    {esp.icono} {esp.nombre}
-                  </option>
-                ))}
+                <option value="">Selecciona una categoría</option>
+                <option value="Derecho Laboral">💼 Derecho Laboral</option>
+                <option value="Derecho Penal">⚖️ Derecho Penal</option>
+                <option value="Derecho de Familia">👨‍👩‍👧 Derecho de Familia</option>
+                <option value="Derecho Civil">🏛️ Derecho Civil</option>
+                <option value="Derecho Comercial">💰 Derecho Comercial</option>
+                <option value="Derecho de Tránsito">🚗 Derecho de Tránsito</option>
+                <option value="Derecho Inmobiliario">🏠 Derecho Inmobiliario</option>
               </select>
             </div>
 
+            {/* Descripción */}
             <div>
-              <label htmlFor="descripcion" className="block text-sm font-semibold text-gray-900 mb-2">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
                 Descripción detallada *
               </label>
               <textarea
-                id="descripcion"
+                required
                 rows={6}
-                placeholder="Describe tu situación legal con el mayor detalle posible..."
                 value={formData.descripcion}
                 onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition resize-none"
-                required
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                placeholder="Describe tu situación legal con el mayor detalle posible..."
               />
+              <p className="mt-2 text-sm text-gray-500">
+                Mínimo 50 caracteres. Incluye fechas, nombres y hechos relevantes.
+              </p>
             </div>
 
+            {/* Urgencia */}
             <div>
-              <label className="block text-sm font-semibold text-gray-900 mb-3">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
                 Nivel de urgencia *
               </label>
               <div className="grid grid-cols-3 gap-4">
                 <button
                   type="button"
                   onClick={() => setFormData({ ...formData, urgencia: 'BAJA' })}
-                  className={`p-4 border-2 rounded-lg transition ${
+                  className={`p-4 border-2 rounded-lg font-semibold transition ${
                     formData.urgencia === 'BAJA'
-                      ? 'border-green-500 bg-green-50'
-                      : 'border-gray-200 hover:border-green-300'
+                      ? 'border-green-500 bg-green-50 text-green-700'
+                      : 'border-gray-200 text-gray-700 hover:border-green-300'
                   }`}
                 >
-                  <div className="text-center">
-                    <div className="text-2xl mb-2">🟢</div>
-                    <p className="font-semibold text-gray-900">Baja</p>
-                    <p className="text-xs text-gray-600 mt-1">Puedo esperar</p>
-                  </div>
+                  🟢 Baja
+                  <p className="text-xs font-normal mt-1">Puedo esperar semanas</p>
                 </button>
-
                 <button
                   type="button"
                   onClick={() => setFormData({ ...formData, urgencia: 'MEDIA' })}
-                  className={`p-4 border-2 rounded-lg transition ${
+                  className={`p-4 border-2 rounded-lg font-semibold transition ${
                     formData.urgencia === 'MEDIA'
-                      ? 'border-yellow-500 bg-yellow-50'
-                      : 'border-gray-200 hover:border-yellow-300'
+                      ? 'border-yellow-500 bg-yellow-50 text-yellow-700'
+                      : 'border-gray-200 text-gray-700 hover:border-yellow-300'
                   }`}
                 >
-                  <div className="text-center">
-                    <div className="text-2xl mb-2">🟡</div>
-                    <p className="font-semibold text-gray-900">Media</p>
-                    <p className="text-xs text-gray-600 mt-1">Respuesta pronto</p>
-                  </div>
+                  🟡 Media
+                  <p className="text-xs font-normal mt-1">Necesito en días</p>
                 </button>
-
                 <button
                   type="button"
                   onClick={() => setFormData({ ...formData, urgencia: 'ALTA' })}
-                  className={`p-4 border-2 rounded-lg transition ${
+                  className={`p-4 border-2 rounded-lg font-semibold transition ${
                     formData.urgencia === 'ALTA'
-                      ? 'border-red-500 bg-red-50'
-                      : 'border-gray-200 hover:border-red-300'
+                      ? 'border-red-500 bg-red-50 text-red-700'
+                      : 'border-gray-200 text-gray-700 hover:border-red-300'
                   }`}
                 >
-                  <div className="text-center">
-                    <div className="text-2xl mb-2">🔴</div>
-                    <p className="font-semibold text-gray-900">Alta</p>
-                    <p className="text-xs text-gray-600 mt-1">Es urgente</p>
-                  </div>
+                  🔴 Alta
+                  <p className="text-xs font-normal mt-1">Es urgente</p>
                 </button>
               </div>
             </div>
 
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <div className="flex gap-3">
-                <svg className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <div>
-                  <p className="text-sm font-semibold text-blue-900 mb-1">
-                    ¿Qué sucede después?
-                  </p>
-                  <ul className="text-sm text-blue-800 space-y-1">
-                    <li>• Te mostraremos los 3 mejores abogados para tu caso</li>
-                    <li>• Podrás revisar sus perfiles y calificaciones</li>
-                    <li>• Seleccionas al abogado que prefieras</li>
-                  </ul>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex gap-4 pt-4">
-              <button
-                type="button"
-                onClick={() => router.back()}
-                className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-50 transition"
-              >
-                Cancelar
-              </button>
+            {/* Botón Submit */}
+            <div className="pt-6">
               <button
                 type="submit"
                 disabled={loading}
-                className="flex-1 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg font-semibold hover:from-blue-700 hover:to-indigo-700 transition disabled:opacity-50"
+                className="w-full py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold text-lg rounded-xl hover:from-blue-700 hover:to-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {loading ? 'Buscando abogados...' : 'Continuar'}
+                {loading ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    Procesando...
+                  </span>
+                ) : (
+                  'Buscar Abogados →'
+                )}
               </button>
             </div>
           </form>
+        </div>
+
+        {/* Información adicional */}
+        <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <div className="flex gap-3">
+            <div className="text-blue-600 text-xl">ℹ️</div>
+            <div className="flex-1">
+              <h3 className="font-semibold text-blue-900 mb-1">¿Qué sigue?</h3>
+              <p className="text-sm text-blue-700">
+                Una vez que envíes este formulario, nuestro sistema buscará los 3 abogados más 
+                adecuados para tu caso según especialidad, experiencia y disponibilidad.
+              </p>
+            </div>
+          </div>
         </div>
       </main>
     </div>
