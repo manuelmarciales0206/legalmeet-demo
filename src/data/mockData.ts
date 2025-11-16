@@ -1,0 +1,201 @@
+// Mock Data para Demo LegalMeet
+
+export const especialidades = [
+  { id: '1', nombre: 'Derecho Laboral', icono: '💼' },
+  { id: '2', nombre: 'Derecho Civil', icono: '🏛️' },
+  { id: '3', nombre: 'Derecho Penal', icono: '⚖️' },
+  { id: '4', nombre: 'Derecho de Familia', icono: '👨‍👩‍👧' },
+  { id: '5', nombre: 'Derecho Comercial', icono: '💰' },
+  { id: '6', nombre: 'Derecho Tributario', icono: '📊' },
+  { id: '7', nombre: 'Derecho Inmobiliario', icono: '🏠' },
+  { id: '8', nombre: 'Derecho de Tránsito', icono: '🚗' },
+];
+
+export const abogados = [
+  {
+    id: '1',
+    nombre: 'Dra. María Fernanda Gómez',
+    especialidad: 'Derecho Laboral',
+    rating: 4.9,
+    totalReviews: 127,
+    tarifa: 85000,
+    experiencia: 12,
+    universidad: 'Universidad de los Andes',
+    foto: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Maria',
+    descripcion: 'Especialista en conflictos laborales y derecho colectivo. Amplia experiencia en negociación con sindicatos.',
+    disponibilidad: 'Inmediata',
+    idiomas: ['Español', 'Inglés'],
+    casosResueltos: 340,
+  },
+  {
+    id: '2',
+    nombre: 'Dr. Carlos Alberto Rodríguez',
+    especialidad: 'Derecho Penal',
+    rating: 4.8,
+    totalReviews: 89,
+    tarifa: 120000,
+    experiencia: 18,
+    universidad: 'Universidad Nacional de Colombia',
+    foto: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Carlos',
+    descripcion: 'Ex fiscal con 18 años de experiencia. Especialista en delitos económicos y penales.',
+    disponibilidad: 'Mañana',
+    idiomas: ['Español'],
+    casosResueltos: 256,
+  },
+  {
+    id: '3',
+    nombre: 'Dra. Ana Lucía Martínez',
+    especialidad: 'Derecho de Familia',
+    rating: 4.95,
+    totalReviews: 203,
+    tarifa: 95000,
+    experiencia: 15,
+    universidad: 'Universidad Javeriana',
+    foto: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Ana',
+    descripcion: 'Mediadora certificada. Especialista en divorcios, custodia y sucesiones.',
+    disponibilidad: 'Inmediata',
+    idiomas: ['Español', 'Francés'],
+    casosResueltos: 478,
+  },
+  {
+    id: '4',
+    nombre: 'Dr. Jorge Enrique Vargas',
+    especialidad: 'Derecho Comercial',
+    rating: 4.7,
+    totalReviews: 145,
+    tarifa: 150000,
+    experiencia: 20,
+    universidad: 'Universidad Externado',
+    foto: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Jorge',
+    descripcion: 'Asesor de grandes empresas. Experto en contratos, fusiones y adquisiciones.',
+    disponibilidad: 'En 3 días',
+    idiomas: ['Español', 'Inglés', 'Portugués'],
+    casosResueltos: 189,
+  },
+  {
+    id: '5',
+    nombre: 'Dra. Claudia Patricia Sánchez',
+    especialidad: 'Derecho Tributario',
+    rating: 4.85,
+    totalReviews: 167,
+    tarifa: 110000,
+    experiencia: 14,
+    universidad: 'Universidad de La Sabana',
+    foto: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Claudia',
+    descripcion: 'Ex funcionaria DIAN. Especialista en impuestos y planeación tributaria.',
+    disponibilidad: 'Mañana',
+    idiomas: ['Español', 'Inglés'],
+    casosResueltos: 312,
+  },
+];
+
+export const usuarioDemo = {
+  id: 'user-1',
+  nombre: 'Juan Pablo Restrepo',
+  email: 'juan.restrepo@example.com',
+  telefono: '+57 310 555 1234',
+  ciudad: 'Cúcuta',
+  foto: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Juan',
+  fechaRegistro: '2024-10-15',
+};
+
+export const casosDemo = [
+  {
+    id: 'caso-1',
+    titulo: 'Despido injustificado',
+    descripcion: 'Me despidieron sin justa causa y no me han pagado liquidación',
+    categoria: 'Derecho Laboral',
+    estado: 'EN_MATCHING',
+    urgencia: 'ALTA',
+    fechaCreacion: '2024-11-14',
+    usuarioId: 'user-1',
+  },
+  {
+    id: 'caso-2',
+    titulo: 'Divorcio de mutuo acuerdo',
+    descripcion: 'Necesito orientación para divorcio por mutuo acuerdo',
+    categoria: 'Derecho de Familia',
+    estado: 'COMPLETADO',
+    urgencia: 'MEDIA',
+    fechaCreacion: '2024-10-20',
+    usuarioId: 'user-1',
+    abogadoId: '3',
+    calificacion: 5,
+  },
+];
+
+export const citasDemo = [
+  {
+    id: 'cita-1',
+    casoId: 'caso-1',
+    abogadoId: '1',
+    fecha: '2024-11-18',
+    hora: '10:00',
+    duracion: 60,
+    tipo: 'VIDEO',
+    estado: 'CONFIRMADA',
+    monto: 85000,
+  },
+  {
+    id: 'cita-2',
+    casoId: 'caso-2',
+    abogadoId: '3',
+    fecha: '2024-11-10',
+    hora: '15:00',
+    duracion: 60,
+    tipo: 'VIDEO',
+    estado: 'COMPLETADA',
+    monto: 95000,
+  },
+];
+
+export const mensajesDemo = [
+  {
+    id: '1',
+    autor: 'abogado',
+    nombre: 'Dra. María Fernanda Gómez',
+    mensaje: 'Buenos días, he revisado su caso. ¿Tiene su contrato de trabajo y las cartas de despido?',
+    timestamp: '10:05 AM',
+  },
+  {
+    id: '2',
+    autor: 'cliente',
+    nombre: 'Juan Pablo Restrepo',
+    mensaje: 'Sí, tengo toda la documentación. Se la puedo enviar ahora.',
+    timestamp: '10:06 AM',
+  },
+  {
+    id: '3',
+    autor: 'abogado',
+    nombre: 'Dra. María Fernanda Gómez',
+    mensaje: 'Perfecto. Según lo que me comenta, usted tiene derecho a reclamar indemnización por despido injustificado.',
+    timestamp: '10:08 AM',
+  },
+];
+
+export const statsDemo = {
+  casosActivos: 1,
+  casosCompletados: 3,
+  proximasCitas: 1,
+  gastoTotal: 285000,
+  horasConsultoria: 4.5,
+};
+
+export const reviewsDemo = [
+  {
+    id: '1',
+    abogadoId: '1',
+    usuarioNombre: 'Sofía Ramírez',
+    rating: 5,
+    comentario: 'Excelente profesional. Me ayudó a resolver mi caso laboral de manera rápida y efectiva.',
+    fecha: '2024-11-05',
+  },
+  {
+    id: '2',
+    abogadoId: '1',
+    usuarioNombre: 'Miguel Ángel Torres',
+    rating: 5,
+    comentario: 'Muy clara en sus explicaciones. Recomendada 100%.',
+    fecha: '2024-10-28',
+  },
+];
