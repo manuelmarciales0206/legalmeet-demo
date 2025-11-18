@@ -59,9 +59,7 @@ export async function POST(req: NextRequest) {
       if (classification) {
         console.log('🎯 Clasificación exitosa:', classification);
         
-        const caseData = encodeURIComponent(JSON.stringify(classification));
-        const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-        const caseUrl = `${appUrl}/dashboard`;
+        const caseUrl = 'https://legalmeet-demo.vercel.app/dashboard';
         
         const finalMessage = `✅ Perfecto, entiendo tu caso.\n\n` +
           `📋 Tipo: ${classification.categoria}\n` +
