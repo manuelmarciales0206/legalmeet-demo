@@ -61,12 +61,12 @@ export async function POST(req: NextRequest) {
         
         const caseData = encodeURIComponent(JSON.stringify(classification));
         const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-        const caseUrl = `${appUrl}/cases/new?data=${caseData}`;
+        const caseUrl = `${appUrl}/dashboard`;
         
         const finalMessage = `✅ Perfecto, entiendo tu caso.\n\n` +
           `📋 Tipo: ${classification.categoria}\n` +
           `⚠️ Urgencia: ${classification.urgencia}\n\n` +
-          `Te conectaré con abogados especializados. Continúa aquí:\n` +
+          `Accede a la plataforma para ver abogados disponibles:\n` +
           `${caseUrl}`;
         
         conversationService.addMessage(phoneNumber, 'assistant', finalMessage);
