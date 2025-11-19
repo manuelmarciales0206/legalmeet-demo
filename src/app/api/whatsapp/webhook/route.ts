@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { aiService } from '@/services/ai.service';
 import { whatsappService } from '@/services/whatsapp.service';
 import { conversationService } from '@/services/conversation.service';
+import { radicadoService } from '@/services/radicado.service';
 
 export async function POST(req: NextRequest) {
   try {
@@ -23,6 +24,7 @@ export async function POST(req: NextRequest) {
     console.log(`💬 Mensaje: "${body}"`);
     console.log(`🆔 Message ID: ${messageId}`);
 
+    // Verificar si es nueva conversación o comando de inicio
     const isNew = conversationService.isNewConversation(phoneNumber);
     const isStartCommand = ['iniciar', 'hola', 'start', 'empezar'].includes(
       body.toLowerCase().trim()
@@ -46,11 +48,13 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    // Agregar mensaje del usuario
     conversationService.addMessage(phoneNumber, 'user', body);
     
     const messages = conversationService.getMessages(phoneNumber);
     console.log(`📊 Total mensajes en conversación: ${messages.length}`);
     
+    // Verificar si hay suficiente información para clasificar
     if (aiService.hasEnoughInformation(messages)) {
       console.log('✅ Suficiente información recopilada, clasificando caso...');
       
@@ -59,26 +63,43 @@ export async function POST(req: NextRequest) {
       if (classification) {
         console.log('🎯 Clasificación exitosa:', classification);
         
+        // 🆕 GENERAR RADICADO
+        const radicado = radicadoService.generateRadicado(classification.categoria);
+        console.log('📋 Radicado generado:', radicado);
+        
+        // Guardar radicado en conversación
+        conversationService.addMessage(phoneNumber, 'assistant', `RADICADO: ${radicado}`);
+        
         const caseUrl = 'https://legalmeet-demo.vercel.app/dashboard';
         
+        // 🆕 MENSAJE CON RADICADO
         const finalMessage = `✅ Perfecto, entiendo tu caso.\n\n` +
+          `📋 Radicado: ${radicado}\n` +
           `📋 Tipo: ${classification.categoria}\n` +
           `⚠️ Urgencia: ${classification.urgencia}\n\n` +
-          `Accede a la plataforma para ver abogados disponibles:\n` +
+          `*Guarda tu número de radicado para darle seguimiento.*\n\n` +
+          `Accede a la plataforma:\n` +
           `${caseUrl}`;
         
         conversationService.addMessage(phoneNumber, 'assistant', finalMessage);
         await whatsappService.sendTextMessage(phoneNumber, finalMessage);
         
+        // Limpiar conversación después de 5 segundos
         setTimeout(() => {
           conversationService.clearConversation(phoneNumber);
         }, 5000);
         
-        console.log('✅ Caso clasificado y enviado');
-        return NextResponse.json({ success: true, action: 'classified', classification });
+        console.log('✅ Caso clasificado con radicado:', radicado);
+        return NextResponse.json({ 
+          success: true, 
+          action: 'classified', 
+          classification,
+          radicado
+        });
       }
     }
 
+    // Generar respuesta con IA
     console.log('🤖 Generando respuesta con IA...');
     const aiResponse = await aiService.generateResponse(messages);
     
