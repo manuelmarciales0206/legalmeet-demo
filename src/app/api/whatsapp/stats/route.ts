@@ -1,11 +1,20 @@
 import { NextResponse } from 'next/server';
-import { conversationService } from '@/services/conversation.service';
+import { analyticsService } from '@/services/analytics.service';
 
 export async function GET() {
-  const stats = conversationService.getStats();
-  
-  return NextResponse.json({
-    success: true,
-    ...stats,
-  });
+  try {
+    const data = analyticsService.getDashboardData();
+    
+    return NextResponse.json({
+      success: true,
+      data,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('❌ Error getting stats:', error);
+    return NextResponse.json(
+      { error: 'Failed to get statistics' },
+      { status: 500 }
+    );
+  }
 }

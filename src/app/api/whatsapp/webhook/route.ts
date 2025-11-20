@@ -5,6 +5,7 @@ import { conversationService } from '@/services/conversation.service';
 import { radicadoService } from '@/services/radicado.service';
 import { pricingService } from '@/services/pricing.service';
 import { pdfTicketService } from '@/services/pdf-ticket.service';
+import { analyticsService } from '@/services/analytics.service';
 
 export async function POST(req: NextRequest) {
   try {
@@ -26,6 +27,7 @@ export async function POST(req: NextRequest) {
     console.log(`💬 Mensaje: "${body}"`);
     console.log(`🆔 Message ID: ${messageId}`);
 
+    // Verificar si es nueva conversación o comando de inicio
     const isNew = conversationService.isNewConversation(phoneNumber);
     const isStartCommand = ['iniciar', 'hola', 'start', 'empezar'].includes(
       body.toLowerCase().trim()
@@ -49,11 +51,13 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    // Agregar mensaje del usuario
     conversationService.addMessage(phoneNumber, 'user', body);
     
     const messages = conversationService.getMessages(phoneNumber);
     console.log(`📊 Total mensajes en conversación: ${messages.length}`);
     
+    // Verificar si hay suficiente información para clasificar
     if (aiService.hasEnoughInformation(messages)) {
       console.log('✅ Suficiente información recopilada, clasificando caso...');
       
@@ -62,49 +66,67 @@ export async function POST(req: NextRequest) {
       if (classification) {
         console.log('🎯 Clasificación exitosa:', classification);
         
-        // Generar radicado
+        // 1. Generar radicado único
         const radicado = radicadoService.generateRadicado(classification.categoria);
         console.log('📋 Radicado generado:', radicado);
         
-        // Estimar costos
+        // 2. Estimar costos basados en categoría y urgencia
         const estimatedCost = pricingService.estimateCost(
           classification.categoria,
           classification.urgencia
         );
         console.log('💵 Costo estimado:', estimatedCost);
         
-        // Generar ticket completo
+        // 3. Registrar en analytics para dashboard
+        analyticsService.registerCase({
+          radicado,
+          categoria: classification.categoria,
+          urgencia: classification.urgencia,
+          timestamp: new Date(),
+          estimatedRevenue: estimatedCost.estimated * 0.15, // Comisión 15%
+        });
+        console.log('📊 Caso registrado en analytics');
+        
+        // 4. Generar ticket profesional completo
         const timestamp = new Date();
         const ticketContent = pdfTicketService.generateTicketContent({
           radicado,
           classification,
           phoneNumber,
           timestamp,
-          estimatedCost
+          estimatedCost,
         });
         
-        // Enviar ticket por WhatsApp
+        // 5. Enviar ticket por WhatsApp
         await whatsappService.sendTextMessage(phoneNumber, ticketContent);
         
-        // Guardar en conversación
+        // 6. Guardar ticket en conversación
         conversationService.addMessage(phoneNumber, 'assistant', ticketContent);
         
-        // Limpiar conversación después de 10 segundos
+        // 7. Limpiar conversación después de 10 segundos
         setTimeout(() => {
           conversationService.clearConversation(phoneNumber);
         }, 10000);
         
-        console.log('✅ Ticket enviado con radicado:', radicado);
+        console.log('✅ Ticket enviado exitosamente');
+        console.log('   Radicado:', radicado);
+        console.log('   Categoría:', classification.categoria);
+        console.log('   Urgencia:', classification.urgencia);
+        console.log('   Costo estimado:', estimatedCost.estimated);
+        console.log('   Comisión estimada:', estimatedCost.estimated * 0.15);
+        
         return NextResponse.json({ 
           success: true, 
           action: 'classified', 
           classification,
           radicado,
-          estimatedCost
+          estimatedCost,
+          commission: estimatedCost.estimated * 0.15
         });
       }
     }
 
+    // Generar respuesta con IA si no hay suficiente información
     console.log('🤖 Generando respuesta con IA...');
     const aiResponse = await aiService.generateResponse(messages);
     
@@ -129,10 +151,28 @@ export async function POST(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
   console.log('✅ Webhook health check');
+  
+  const stats = conversationService.getStats();
+  const analytics = {
+    totalCases: analyticsService.getDashboardData().general.totalCases,
+    casesToday: analyticsService.getDashboardData().general.casesToday,
+  };
+  
   return NextResponse.json({ 
     status: 'ok',
     service: 'LegalMeet WhatsApp Webhook',
+    version: '2.0.0',
+    features: [
+      'AI Classification',
+      'Unique Radicado',
+      'Price Estimation',
+      'Professional Ticket',
+      'Analytics Tracking'
+    ],
     timestamp: new Date().toISOString(),
-    stats: conversationService.getStats()
+    stats: {
+      ...stats,
+      ...analytics,
+    }
   });
 }
