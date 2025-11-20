@@ -6,6 +6,7 @@ import { radicadoService } from '@/services/radicado.service';
 import { pricingService } from '@/services/pricing.service';
 import { pdfTicketService } from '@/services/pdf-ticket.service';
 import { analyticsService } from '@/services/analytics.service';
+import { audioService } from '@/services/audio.service';
 
 export async function POST(req: NextRequest) {
   try {
@@ -16,43 +17,110 @@ export async function POST(req: NextRequest) {
     const body = formData.get('Body') as string;
     const messageId = formData.get('MessageSid') as string;
     
-    if (!from || !body) {
-      console.error('❌ Missing parameters');
+    // Datos de audio/media
+    const numMedia = parseInt(formData.get('NumMedia') as string || '0');
+    const mediaContentType = formData.get('MediaContentType0') as string | null;
+    const mediaUrl = formData.get('MediaUrl0') as string | null;
+    
+    if (!from) {
+      console.error('❌ Missing from parameter');
       return NextResponse.json({ error: 'Missing parameters' }, { status: 400 });
     }
 
     const phoneNumber = from.replace('whatsapp:', '');
     
     console.log(`📱 De: ${phoneNumber}`);
-    console.log(`💬 Mensaje: "${body}"`);
     console.log(`🆔 Message ID: ${messageId}`);
+    console.log(`🎵 NumMedia: ${numMedia}`);
+    console.log(`🎵 MediaType: ${mediaContentType}`);
 
-    // Verificar si es nueva conversación o comando de inicio
-    const isNew = conversationService.isNewConversation(phoneNumber);
+    // Variable para almacenar el texto del mensaje (ya sea escrito o transcrito)
+    let messageText = body;
+
+    // Si hay audio, transcribirlo
+    if (numMedia > 0 && mediaUrl && audioService.isAudioMessage(mediaContentType)) {
+      console.log('🎙️ Mensaje de audio detectado');
+      
+      // Enviar mensaje de "estoy procesando"
+      await whatsappService.sendTextMessage(
+        phoneNumber,
+        '🎙️ Procesando tu audio...'
+      );
+      
+      // Transcribir el audio
+      const transcription = await audioService.transcribeAudio(mediaUrl);
+      
+      if (transcription) {
+        messageText = transcription;
+        console.log(`💬 Transcripción: "${messageText}"`);
+        
+        // Enviar confirmación de transcripción
+        const confirmationMessage = audioService.formatTranscriptionMessage(transcription);
+        await whatsappService.sendTextMessage(phoneNumber, confirmationMessage);
+      } else {
+        console.error('❌ No se pudo transcribir el audio');
+        await whatsappService.sendTextMessage(
+          phoneNumber,
+          'Disculpa, no pude procesar el audio. ¿Podrías escribir tu mensaje?'
+        );
+        return NextResponse.json({ 
+          success: false, 
+          error: 'Audio transcription failed' 
+        });
+      }
+    }
+
+    // Si no hay texto (ni escrito ni transcrito), es comando de inicio
+    if (!messageText || messageText.trim() === '') {
+      const isNew = conversationService.isNewConversation(phoneNumber);
+      const isStartCommand = true; // Si no hay texto, iniciamos
+      
+      if (isNew || isStartCommand) {
+        console.log('🆕 Iniciando nueva conversación');
+        
+        conversationService.clearConversation(phoneNumber);
+        
+        const welcomeMessage = `¡Hola! 👋 Soy el asistente legal de LegalMeet.\n\n¿En qué situación legal puedo ayudarte hoy?\n\n💡 Puedes escribir o enviar audio.`;
+        
+        conversationService.addMessage(phoneNumber, 'assistant', welcomeMessage);
+        await whatsappService.sendTextMessage(phoneNumber, welcomeMessage);
+        
+        console.log('✅ Conversación iniciada exitosamente');
+        return NextResponse.json({ 
+          success: true, 
+          action: 'welcome',
+          message: 'Conversation started'
+        });
+      }
+    }
+
+    console.log(`💬 Mensaje procesado: "${messageText}"`);
+
+    // Verificar comandos de inicio
     const isStartCommand = ['iniciar', 'hola', 'start', 'empezar'].includes(
-      body.toLowerCase().trim()
+      messageText.toLowerCase().trim()
     );
 
-    if (isNew || isStartCommand) {
-      console.log('🆕 Iniciando nueva conversación');
+    if (isStartCommand) {
+      console.log('🆕 Comando de inicio recibido');
       
       conversationService.clearConversation(phoneNumber);
       
-      const welcomeMessage = `¡Hola! 👋 Soy el asistente legal de LegalMeet.\n\n¿En qué situación legal puedo ayudarte hoy?`;
+      const welcomeMessage = `¡Hola! 👋 Soy el asistente legal de LegalMeet.\n\n¿En qué situación legal puedo ayudarte hoy?\n\n💡 Puedes escribir o enviar audio.`;
       
       conversationService.addMessage(phoneNumber, 'assistant', welcomeMessage);
       await whatsappService.sendTextMessage(phoneNumber, welcomeMessage);
       
-      console.log('✅ Conversación iniciada exitosamente');
+      console.log('✅ Conversación reiniciada exitosamente');
       return NextResponse.json({ 
         success: true, 
         action: 'welcome',
-        message: 'Conversation started'
+        message: 'Conversation restarted'
       });
     }
 
-    // Agregar mensaje del usuario
-    conversationService.addMessage(phoneNumber, 'user', body);
+    // Agregar mensaje del usuario (ya sea texto o audio transcrito)
+    conversationService.addMessage(phoneNumber, 'user', messageText);
     
     const messages = conversationService.getMessages(phoneNumber);
     console.log(`📊 Total mensajes en conversación: ${messages.length}`);
@@ -83,7 +151,7 @@ export async function POST(req: NextRequest) {
           categoria: classification.categoria,
           urgencia: classification.urgencia,
           timestamp: new Date(),
-          estimatedRevenue: estimatedCost.estimated * 0.15, // Comisión 15%
+          estimatedRevenue: estimatedCost.estimated * 0.15,
         });
         console.log('📊 Caso registrado en analytics');
         
@@ -109,11 +177,6 @@ export async function POST(req: NextRequest) {
         }, 10000);
         
         console.log('✅ Ticket enviado exitosamente');
-        console.log('   Radicado:', radicado);
-        console.log('   Categoría:', classification.categoria);
-        console.log('   Urgencia:', classification.urgencia);
-        console.log('   Costo estimado:', estimatedCost.estimated);
-        console.log('   Comisión estimada:', estimatedCost.estimated * 0.15);
         
         return NextResponse.json({ 
           success: true, 
@@ -121,7 +184,7 @@ export async function POST(req: NextRequest) {
           classification,
           radicado,
           estimatedCost,
-          commission: estimatedCost.estimated * 0.15
+          audioTranscribed: numMedia > 0
         });
       }
     }
@@ -137,7 +200,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ 
       success: true, 
       action: 'conversation',
-      response: aiResponse
+      response: aiResponse,
+      audioTranscribed: numMedia > 0
     });
     
   } catch (error) {
@@ -152,27 +216,18 @@ export async function POST(req: NextRequest) {
 export async function GET(req: NextRequest) {
   console.log('✅ Webhook health check');
   
-  const stats = conversationService.getStats();
-  const analytics = {
-    totalCases: analyticsService.getDashboardData().general.totalCases,
-    casesToday: analyticsService.getDashboardData().general.casesToday,
-  };
-  
   return NextResponse.json({ 
     status: 'ok',
     service: 'LegalMeet WhatsApp Webhook',
-    version: '2.0.0',
+    version: '2.1.0',
     features: [
       'AI Classification',
       'Unique Radicado',
       'Price Estimation',
       'Professional Ticket',
-      'Analytics Tracking'
+      'Analytics Tracking',
+      '🎙️ Audio Transcription (Whisper)'
     ],
     timestamp: new Date().toISOString(),
-    stats: {
-      ...stats,
-      ...analytics,
-    }
   });
 }
