@@ -3,6 +3,8 @@ import { aiService } from '@/services/ai.service';
 import { whatsappService } from '@/services/whatsapp.service';
 import { conversationService } from '@/services/conversation.service';
 import { radicadoService } from '@/services/radicado.service';
+import { pricingService } from '@/services/pricing.service';
+import { pdfTicketService } from '@/services/pdf-ticket.service';
 
 export async function POST(req: NextRequest) {
   try {
@@ -24,7 +26,6 @@ export async function POST(req: NextRequest) {
     console.log(`💬 Mensaje: "${body}"`);
     console.log(`🆔 Message ID: ${messageId}`);
 
-    // Verificar si es nueva conversación o comando de inicio
     const isNew = conversationService.isNewConversation(phoneNumber);
     const isStartCommand = ['iniciar', 'hola', 'start', 'empezar'].includes(
       body.toLowerCase().trim()
@@ -48,13 +49,11 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Agregar mensaje del usuario
     conversationService.addMessage(phoneNumber, 'user', body);
     
     const messages = conversationService.getMessages(phoneNumber);
     console.log(`📊 Total mensajes en conversación: ${messages.length}`);
     
-    // Verificar si hay suficiente información para clasificar
     if (aiService.hasEnoughInformation(messages)) {
       console.log('✅ Suficiente información recopilada, clasificando caso...');
       
@@ -63,43 +62,49 @@ export async function POST(req: NextRequest) {
       if (classification) {
         console.log('🎯 Clasificación exitosa:', classification);
         
-        // 🆕 GENERAR RADICADO
+        // Generar radicado
         const radicado = radicadoService.generateRadicado(classification.categoria);
         console.log('📋 Radicado generado:', radicado);
         
-        // Guardar radicado en conversación
-        conversationService.addMessage(phoneNumber, 'assistant', `RADICADO: ${radicado}`);
+        // Estimar costos
+        const estimatedCost = pricingService.estimateCost(
+          classification.categoria,
+          classification.urgencia
+        );
+        console.log('💵 Costo estimado:', estimatedCost);
         
-        const caseUrl = 'https://legalmeet-demo.vercel.app/dashboard';
+        // Generar ticket completo
+        const timestamp = new Date();
+        const ticketContent = pdfTicketService.generateTicketContent({
+          radicado,
+          classification,
+          phoneNumber,
+          timestamp,
+          estimatedCost
+        });
         
-        // 🆕 MENSAJE CON RADICADO
-        const finalMessage = `✅ Perfecto, entiendo tu caso.\n\n` +
-          `📋 Radicado: ${radicado}\n` +
-          `📋 Tipo: ${classification.categoria}\n` +
-          `⚠️ Urgencia: ${classification.urgencia}\n\n` +
-          `*Guarda tu número de radicado para darle seguimiento.*\n\n` +
-          `Accede a la plataforma:\n` +
-          `${caseUrl}`;
+        // Enviar ticket por WhatsApp
+        await whatsappService.sendTextMessage(phoneNumber, ticketContent);
         
-        conversationService.addMessage(phoneNumber, 'assistant', finalMessage);
-        await whatsappService.sendTextMessage(phoneNumber, finalMessage);
+        // Guardar en conversación
+        conversationService.addMessage(phoneNumber, 'assistant', ticketContent);
         
-        // Limpiar conversación después de 5 segundos
+        // Limpiar conversación después de 10 segundos
         setTimeout(() => {
           conversationService.clearConversation(phoneNumber);
-        }, 5000);
+        }, 10000);
         
-        console.log('✅ Caso clasificado con radicado:', radicado);
+        console.log('✅ Ticket enviado con radicado:', radicado);
         return NextResponse.json({ 
           success: true, 
           action: 'classified', 
           classification,
-          radicado
+          radicado,
+          estimatedCost
         });
       }
     }
 
-    // Generar respuesta con IA
     console.log('🤖 Generando respuesta con IA...');
     const aiResponse = await aiService.generateResponse(messages);
     
