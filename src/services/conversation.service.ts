@@ -1,18 +1,33 @@
 import { Message } from './ai.service';
 
+type ConversationState = 
+  | 'CHATTING' 
+  | 'WAITING_APPOINTMENT_DECISION'
+  | 'COLLECTING_NAME'
+  | 'COLLECTING_EMAIL'
+  | 'COLLECTING_DATE'
+  | 'COLLECTING_TIME';
+
 interface Conversation {
   phoneNumber: string;
   messages: Message[];
   startedAt: Date;
   lastMessageAt: Date;
+  state: ConversationState;
+  appointmentData?: {
+    radicado?: string;
+    categoria?: string;
+    urgencia?: string;
+    userName?: string;
+    userEmail?: string;
+    preferredDate?: string;
+    preferredTime?: string;
+  };
 }
 
 class ConversationService {
   private conversations = new Map<string, Conversation>();
 
-  /**
-   * Obtener o crear conversación
-   */
   getConversation(phoneNumber: string): Conversation {
     const existing = this.conversations.get(phoneNumber);
     
@@ -25,6 +40,7 @@ class ConversationService {
       messages: [],
       startedAt: new Date(),
       lastMessageAt: new Date(),
+      state: 'CHATTING',
     };
 
     this.conversations.set(phoneNumber, newConversation);
@@ -32,9 +48,6 @@ class ConversationService {
     return newConversation;
   }
 
-  /**
-   * Agregar mensaje a conversación
-   */
   addMessage(phoneNumber: string, role: 'user' | 'assistant', content: string): void {
     const conversation = this.getConversation(phoneNumber);
     
@@ -45,33 +58,48 @@ class ConversationService {
     console.log(`💬 Mensaje agregado [${role}]: ${content.substring(0, 50)}...`);
   }
 
-  /**
-   * Obtener mensajes de conversación
-   */
   getMessages(phoneNumber: string): Message[] {
     const conversation = this.conversations.get(phoneNumber);
     return conversation?.messages || [];
   }
 
-  /**
-   * Limpiar conversación
-   */
+  setState(phoneNumber: string, state: ConversationState): void {
+    const conversation = this.getConversation(phoneNumber);
+    conversation.state = state;
+    this.conversations.set(phoneNumber, conversation);
+    console.log(`🔄 Estado cambiado a: ${state}`);
+  }
+
+  getState(phoneNumber: string): ConversationState {
+    const conversation = this.conversations.get(phoneNumber);
+    return conversation?.state || 'CHATTING';
+  }
+
+  setAppointmentData(phoneNumber: string, data: Partial<Conversation['appointmentData']>): void {
+    const conversation = this.getConversation(phoneNumber);
+    conversation.appointmentData = {
+      ...conversation.appointmentData,
+      ...data,
+    };
+    this.conversations.set(phoneNumber, conversation);
+    console.log('📅 Datos de cita actualizados:', data);
+  }
+
+  getAppointmentData(phoneNumber: string): Conversation['appointmentData'] {
+    const conversation = this.conversations.get(phoneNumber);
+    return conversation?.appointmentData;
+  }
+
   clearConversation(phoneNumber: string): void {
     this.conversations.delete(phoneNumber);
     console.log(`🗑️ Conversación eliminada: ${phoneNumber}`);
   }
 
-  /**
-   * Verificar si es conversación nueva
-   */
   isNewConversation(phoneNumber: string): boolean {
     const conversation = this.conversations.get(phoneNumber);
     return !conversation || conversation.messages.length === 0;
   }
 
-  /**
-   * Limpiar conversaciones antiguas (> 1 hora)
-   */
   cleanOldConversations(): void {
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
     let cleaned = 0;
@@ -88,9 +116,6 @@ class ConversationService {
     }
   }
 
-  /**
-   * Obtener estadísticas
-   */
   getStats() {
     return {
       activeConversations: this.conversations.size,
@@ -99,6 +124,7 @@ class ConversationService {
         messages: c.messages.length,
         started: c.startedAt,
         lastMessage: c.lastMessageAt,
+        state: c.state,
       }))
     };
   }
@@ -106,7 +132,6 @@ class ConversationService {
 
 export const conversationService = new ConversationService();
 
-// Limpiar conversaciones antiguas cada 10 minutos (solo en servidor)
 if (typeof window === 'undefined') {
   setInterval(() => {
     conversationService.cleanOldConversations();

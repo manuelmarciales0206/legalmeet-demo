@@ -7,6 +7,7 @@ import { pricingService } from '@/services/pricing.service';
 import { pdfTicketService } from '@/services/pdf-ticket.service';
 import { analyticsService } from '@/services/analytics.service';
 import { audioService } from '@/services/audio.service';
+import { appointmentService } from '@/services/appointment.service';
 
 export async function POST(req: NextRequest) {
   try {
@@ -32,7 +33,6 @@ export async function POST(req: NextRequest) {
     console.log(`📱 De: ${phoneNumber}`);
     console.log(`🆔 Message ID: ${messageId}`);
     console.log(`🎵 NumMedia: ${numMedia}`);
-    console.log(`🎵 MediaType: ${mediaContentType}`);
 
     // Variable para almacenar el texto del mensaje (ya sea escrito o transcrito)
     let messageText = body;
@@ -41,20 +41,14 @@ export async function POST(req: NextRequest) {
     if (numMedia > 0 && mediaUrl && audioService.isAudioMessage(mediaContentType)) {
       console.log('🎙️ Mensaje de audio detectado');
       
-      // Enviar mensaje de "estoy procesando"
-      await whatsappService.sendTextMessage(
-        phoneNumber,
-        '🎙️ Procesando tu audio...'
-      );
+      await whatsappService.sendTextMessage(phoneNumber, '🎙️ Procesando tu audio...');
       
-      // Transcribir el audio
       const transcription = await audioService.transcribeAudio(mediaUrl);
       
       if (transcription) {
         messageText = transcription;
         console.log(`💬 Transcripción: "${messageText}"`);
         
-        // Enviar confirmación de transcripción
         const confirmationMessage = audioService.formatTranscriptionMessage(transcription);
         await whatsappService.sendTextMessage(phoneNumber, confirmationMessage);
       } else {
@@ -63,89 +57,190 @@ export async function POST(req: NextRequest) {
           phoneNumber,
           'Disculpa, no pude procesar el audio. ¿Podrías escribir tu mensaje?'
         );
-        return NextResponse.json({ 
-          success: false, 
-          error: 'Audio transcription failed' 
-        });
+        return NextResponse.json({ success: false, error: 'Audio transcription failed' });
       }
     }
 
-    // Si no hay texto (ni escrito ni transcrito), es comando de inicio
-    if (!messageText || messageText.trim() === '') {
-      const isNew = conversationService.isNewConversation(phoneNumber);
-      const isStartCommand = true; // Si no hay texto, iniciamos
+    // Obtener estado actual de la conversación
+    const currentState = conversationService.getState(phoneNumber);
+    console.log(`📊 Estado actual: ${currentState}`);
+
+    // MANEJO DE ESTADOS DE AGENDAMIENTO
+    if (currentState === 'WAITING_APPOINTMENT_DECISION') {
+      const answer = messageText.toLowerCase().trim();
       
-      if (isNew || isStartCommand) {
-        console.log('🆕 Iniciando nueva conversación');
+      if (['si', 'sí', 'yes', 'claro', 'dale', 'ok'].some(word => answer.includes(word))) {
+        // Usuario quiere agendar
+        conversationService.setState(phoneNumber, 'COLLECTING_NAME');
+        const response = 'Perfecto! 😊 ¿Cuál es tu nombre completo?';
+        conversationService.addMessage(phoneNumber, 'assistant', response);
+        await whatsappService.sendTextMessage(phoneNumber, response);
+        return NextResponse.json({ success: true, action: 'collecting_name' });
+      } else if (['no', 'nope', 'ahora no', 'después', 'luego'].some(word => answer.includes(word))) {
+        // Usuario no quiere agendar
+        conversationService.setState(phoneNumber, 'CHATTING');
+        const response = 'Perfecto, sin problema. Cuando estés listo, escribe "agendar cita" y te ayudo. 👍';
+        conversationService.addMessage(phoneNumber, 'assistant', response);
+        await whatsappService.sendTextMessage(phoneNumber, response);
         
-        conversationService.clearConversation(phoneNumber);
-        
-        const welcomeMessage = `¡Hola! 👋 Soy el asistente legal de LegalMeet.\n\n¿En qué situación legal puedo ayudarte hoy?\n\n💡 Puedes escribir o enviar audio.`;
-        
-        conversationService.addMessage(phoneNumber, 'assistant', welcomeMessage);
-        await whatsappService.sendTextMessage(phoneNumber, welcomeMessage);
-        
-        console.log('✅ Conversación iniciada exitosamente');
-        return NextResponse.json({ 
-          success: true, 
-          action: 'welcome',
-          message: 'Conversation started'
-        });
+        setTimeout(() => conversationService.clearConversation(phoneNumber), 5000);
+        return NextResponse.json({ success: true, action: 'appointment_declined' });
+      } else {
+        // Respuesta ambigua
+        const response = 'No entendí bien. ¿Quieres agendar una cita? Responde "sí" o "no" 😊';
+        await whatsappService.sendTextMessage(phoneNumber, response);
+        return NextResponse.json({ success: true, action: 'clarification_needed' });
       }
     }
 
-    console.log(`💬 Mensaje procesado: "${messageText}"`);
+    if (currentState === 'COLLECTING_NAME') {
+      const userName = messageText.trim();
+      
+      if (userName.length < 3) {
+        const response = 'Por favor escribe tu nombre completo 😊';
+        await whatsappService.sendTextMessage(phoneNumber, response);
+        return NextResponse.json({ success: true, action: 'name_invalid' });
+      }
 
-    // Verificar comandos de inicio
+      conversationService.setAppointmentData(phoneNumber, { userName });
+      conversationService.setState(phoneNumber, 'COLLECTING_EMAIL');
+      
+      const response = `Gracias ${userName}! ¿Cuál es tu email? 📧`;
+      conversationService.addMessage(phoneNumber, 'assistant', response);
+      await whatsappService.sendTextMessage(phoneNumber, response);
+      return NextResponse.json({ success: true, action: 'collecting_email' });
+    }
+
+    if (currentState === 'COLLECTING_EMAIL') {
+      const userEmail = messageText.trim();
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      
+      if (!emailRegex.test(userEmail)) {
+        const response = 'Ese email no parece válido. Por favor escribe un email correcto. Ej: nombre@gmail.com';
+        await whatsappService.sendTextMessage(phoneNumber, response);
+        return NextResponse.json({ success: true, action: 'email_invalid' });
+      }
+
+      conversationService.setAppointmentData(phoneNumber, { userEmail });
+      conversationService.setState(phoneNumber, 'COLLECTING_DATE');
+      
+      const response = 'Perfecto! ¿Qué día te viene bien para la cita?\n\nPuedes decir: "mañana", "jueves", "25 de noviembre", etc. 📅';
+      conversationService.addMessage(phoneNumber, 'assistant', response);
+      await whatsappService.sendTextMessage(phoneNumber, response);
+      return NextResponse.json({ success: true, action: 'collecting_date' });
+    }
+
+    if (currentState === 'COLLECTING_DATE') {
+      const preferredDate = messageText.trim();
+      
+      if (preferredDate.length < 3) {
+        const response = 'Por favor indica una fecha válida 😊';
+        await whatsappService.sendTextMessage(phoneNumber, response);
+        return NextResponse.json({ success: true, action: 'date_invalid' });
+      }
+
+      conversationService.setAppointmentData(phoneNumber, { preferredDate });
+      conversationService.setState(phoneNumber, 'COLLECTING_TIME');
+      
+      const response = 'Excelente! ¿A qué hora prefieres?\n\nEj: "2pm", "10:30am", "3 de la tarde" 🕐';
+      conversationService.addMessage(phoneNumber, 'assistant', response);
+      await whatsappService.sendTextMessage(phoneNumber, response);
+      return NextResponse.json({ success: true, action: 'collecting_time' });
+    }
+
+    if (currentState === 'COLLECTING_TIME') {
+      const preferredTime = messageText.trim();
+      
+      conversationService.setAppointmentData(phoneNumber, { preferredTime });
+      
+      // Obtener todos los datos recolectados
+      const appointmentData = conversationService.getAppointmentData(phoneNumber);
+      
+      if (!appointmentData?.radicado || !appointmentData.userName || !appointmentData.userEmail) {
+        console.error('❌ Datos incompletos para crear cita');
+        const response = 'Hubo un error. Escribe "agendar cita" para empezar de nuevo.';
+        await whatsappService.sendTextMessage(phoneNumber, response);
+        conversationService.setState(phoneNumber, 'CHATTING');
+        return NextResponse.json({ success: false, error: 'Incomplete data' });
+      }
+
+      // Crear la cita
+      const appointment = appointmentService.createAppointment({
+        radicado: appointmentData.radicado,
+        phoneNumber,
+        userName: appointmentData.userName,
+        userEmail: appointmentData.userEmail,
+        categoria: appointmentData.categoria || 'General',
+        urgencia: appointmentData.urgencia || 'MEDIA',
+        preferredDate: appointmentData.preferredDate || '',
+        preferredTime: preferredTime,
+      });
+
+      // Generar y enviar confirmación
+      const confirmationMessage = appointmentService.generateConfirmationMessage(appointment);
+      await whatsappService.sendTextMessage(phoneNumber, confirmationMessage);
+      conversationService.addMessage(phoneNumber, 'assistant', confirmationMessage);
+
+      // Limpiar después de 10 segundos
+      setTimeout(() => {
+        conversationService.clearConversation(phoneNumber);
+      }, 10000);
+
+      console.log('✅ Cita agendada exitosamente');
+      return NextResponse.json({ 
+        success: true, 
+        action: 'appointment_created',
+        appointment 
+      });
+    }
+
+    // FLUJO NORMAL DE CONVERSACIÓN
+    if (!messageText || messageText.trim() === '') {
+      const welcomeMessage = `¡Hola! 👋 Soy tu asistente legal de LegalMeet.\n\nCuéntame, ¿qué situación legal estás enfrentando?\n\n💡 Puedes escribir o enviarme un audio, como prefieras.`;
+      
+      conversationService.addMessage(phoneNumber, 'assistant', welcomeMessage);
+      await whatsappService.sendTextMessage(phoneNumber, welcomeMessage);
+      
+      return NextResponse.json({ success: true, action: 'welcome' });
+    }
+
     const isStartCommand = ['iniciar', 'hola', 'start', 'empezar'].includes(
       messageText.toLowerCase().trim()
     );
 
     if (isStartCommand) {
-      console.log('🆕 Comando de inicio recibido');
-      
       conversationService.clearConversation(phoneNumber);
+      conversationService.setState(phoneNumber, 'CHATTING');
       
-      const welcomeMessage = `¡Hola! 👋 Soy el asistente legal de LegalMeet.\n\n¿En qué situación legal puedo ayudarte hoy?\n\n💡 Puedes escribir o enviar audio.`;
+      const welcomeMessage = `¡Hola! 👋 Soy tu asistente legal de LegalMeet.\n\nCuéntame, ¿qué situación legal estás enfrentando?\n\n💡 Puedes escribir o enviarme un audio, como prefieras.`;
       
       conversationService.addMessage(phoneNumber, 'assistant', welcomeMessage);
       await whatsappService.sendTextMessage(phoneNumber, welcomeMessage);
       
-      console.log('✅ Conversación reiniciada exitosamente');
-      return NextResponse.json({ 
-        success: true, 
-        action: 'welcome',
-        message: 'Conversation restarted'
-      });
+      return NextResponse.json({ success: true, action: 'welcome' });
     }
 
-    // Agregar mensaje del usuario (ya sea texto o audio transcrito)
+    // Agregar mensaje del usuario
     conversationService.addMessage(phoneNumber, 'user', messageText);
     
     const messages = conversationService.getMessages(phoneNumber);
-    console.log(`📊 Total mensajes en conversación: ${messages.length}`);
+    console.log(`📊 Total mensajes: ${messages.length}`);
     
     // Verificar si hay suficiente información para clasificar
     if (aiService.hasEnoughInformation(messages)) {
-      console.log('✅ Suficiente información recopilada, clasificando caso...');
+      console.log('✅ Suficiente información, clasificando caso...');
       
       const classification = await aiService.classifyCase(messages);
       
       if (classification) {
         console.log('🎯 Clasificación exitosa:', classification);
         
-        // 1. Generar radicado único
         const radicado = radicadoService.generateRadicado(classification.categoria);
-        console.log('📋 Radicado generado:', radicado);
-        
-        // 2. Estimar costos basados en categoría y urgencia
         const estimatedCost = pricingService.estimateCost(
           classification.categoria,
           classification.urgencia
         );
-        console.log('💵 Costo estimado:', estimatedCost);
         
-        // 3. Registrar en analytics para dashboard
         analyticsService.registerCase({
           radicado,
           categoria: classification.categoria,
@@ -153,9 +248,7 @@ export async function POST(req: NextRequest) {
           timestamp: new Date(),
           estimatedRevenue: estimatedCost.estimated * 0.15,
         });
-        console.log('📊 Caso registrado en analytics');
         
-        // 4. Generar ticket profesional completo
         const timestamp = new Date();
         const ticketContent = pdfTicketService.generateTicketContent({
           radicado,
@@ -165,43 +258,49 @@ export async function POST(req: NextRequest) {
           estimatedCost,
         });
         
-        // 5. Enviar ticket por WhatsApp
+        // Enviar ticket
         await whatsappService.sendTextMessage(phoneNumber, ticketContent);
-        
-        // 6. Guardar ticket en conversación
         conversationService.addMessage(phoneNumber, 'assistant', ticketContent);
         
-        // 7. Limpiar conversación después de 10 segundos
-        setTimeout(() => {
-          conversationService.clearConversation(phoneNumber);
-        }, 10000);
+        // Pequeña pausa antes de preguntar por la cita
+        await new Promise(resolve => setTimeout(resolve, 2000));
         
-        console.log('✅ Ticket enviado exitosamente');
+        // Preguntar si quiere agendar cita
+        const appointmentQuestion = `¿Te gustaría agendar una cita con un abogado especializado en ${classification.categoria}? 📅\n\nResponde "sí" o "no"`;
+        
+        conversationService.addMessage(phoneNumber, 'assistant', appointmentQuestion);
+        await whatsappService.sendTextMessage(phoneNumber, appointmentQuestion);
+        
+        // Guardar datos del caso para la cita
+        conversationService.setAppointmentData(phoneNumber, {
+          radicado,
+          categoria: classification.categoria,
+          urgencia: classification.urgencia,
+        });
+        
+        // Cambiar estado a esperar decisión
+        conversationService.setState(phoneNumber, 'WAITING_APPOINTMENT_DECISION');
         
         return NextResponse.json({ 
           success: true, 
-          action: 'classified', 
+          action: 'classified_awaiting_appointment',
           classification,
-          radicado,
-          estimatedCost,
-          audioTranscribed: numMedia > 0
+          radicado 
         });
       }
     }
 
-    // Generar respuesta con IA si no hay suficiente información
+    // Generar respuesta con IA
     console.log('🤖 Generando respuesta con IA...');
     const aiResponse = await aiService.generateResponse(messages);
     
     conversationService.addMessage(phoneNumber, 'assistant', aiResponse);
     await whatsappService.sendTextMessage(phoneNumber, aiResponse);
     
-    console.log('✅ Respuesta IA enviada exitosamente');
     return NextResponse.json({ 
       success: true, 
       action: 'conversation',
-      response: aiResponse,
-      audioTranscribed: numMedia > 0
+      response: aiResponse 
     });
     
   } catch (error) {
@@ -219,14 +318,15 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ 
     status: 'ok',
     service: 'LegalMeet WhatsApp Webhook',
-    version: '2.1.0',
+    version: '3.0.0',
     features: [
       'AI Classification',
       'Unique Radicado',
       'Price Estimation',
       'Professional Ticket',
       'Analytics Tracking',
-      '🎙️ Audio Transcription (Whisper)'
+      '🎙️ Audio Transcription',
+      '📅 Appointment Scheduling'
     ],
     timestamp: new Date().toISOString(),
   });
