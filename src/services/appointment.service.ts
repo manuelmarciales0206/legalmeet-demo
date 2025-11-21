@@ -1,3 +1,5 @@
+import { dateTimeService } from './datetime.service';
+
 interface AppointmentData {
   radicado: string;
   phoneNumber: string;
@@ -21,7 +23,7 @@ class AppointmentService {
     const appointment: AppointmentData = {
       ...data,
       status: 'PENDIENTE',
-      createdAt: new Date(),
+      createdAt: dateTimeService.getNowInColombia(),
     };
 
     this.appointments.push(appointment);
@@ -34,7 +36,11 @@ class AppointmentService {
    * Generar mensaje de confirmación de cita
    */
   generateConfirmationMessage(appointment: AppointmentData): string {
-    const formattedDate = this.formatDate(appointment.preferredDate);
+    const formattedDate = dateTimeService.formatDate(
+      dateTimeService.parseNaturalDate(appointment.preferredDate)
+    );
+    const formattedTime = dateTimeService.parseNaturalTime(appointment.preferredTime);
+    const createdAt = dateTimeService.formatShortDateTime(appointment.createdAt);
 
     return `
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -52,59 +58,38 @@ class AppointmentService {
 📂 Tipo de caso: ${appointment.categoria}
 ⚠️  Urgencia: ${appointment.urgencia}
 
-📅 Fecha: ${formattedDate}
-🕐 Hora: ${appointment.preferredTime}
+📅 Fecha de la cita: ${formattedDate}
+🕐 Hora: ${formattedTime} (Hora Colombia)
+
+📝 Solicitud creada: ${createdAt}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📍 PRÓXIMOS PASOS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-1. Recibirás un email de confirmación
+1. Recibirás confirmación por email*
 2. El abogado te contactará 15 min antes
 3. La consulta será por videollamada
+4. Prepara tus documentos relacionados
 
 💡 Si necesitas reagendar, escribe:
    "reagendar ${appointment.radicado}"
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⚠️  IMPORTANTE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+* El envío de emails está pendiente de
+  configuración. Por ahora recibirás
+  recordatorios solo por WhatsApp.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ✨ Gracias por confiar en LegalMeet
 
-Cualquier duda: soporte@legalmeet.co
+Atención: soporte@legalmeet.co
+WhatsApp: +57 310 357 6748
 `.trim();
-  }
-
-  /**
-   * Formatear fecha de manera amigable
-   */
-  private formatDate(dateString: string): string {
-    // Lógica simple para parsear fechas naturales
-    const today = new Date();
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-
-    const lower = dateString.toLowerCase();
-
-    if (lower.includes('hoy')) {
-      return today.toLocaleDateString('es-CO', { 
-        weekday: 'long', 
-        year: 'numeric', 
-        month: 'long', 
-        day: 'numeric' 
-      });
-    }
-
-    if (lower.includes('mañana')) {
-      return tomorrow.toLocaleDateString('es-CO', { 
-        weekday: 'long', 
-        year: 'numeric', 
-        month: 'long', 
-        day: 'numeric' 
-      });
-    }
-
-    // Si es una fecha específica, intentar parsearla
-    return dateString;
   }
 
   /**
@@ -119,6 +104,33 @@ Cualquier duda: soporte@legalmeet.co
    */
   findByRadicado(radicado: string): AppointmentData | undefined {
     return this.appointments.find(apt => apt.radicado === radicado);
+  }
+
+  /**
+   * Obtener citas de hoy
+   */
+  getTodayAppointments(): AppointmentData[] {
+    const today = dateTimeService.formatDate(dateTimeService.getNowInColombia());
+    
+    return this.appointments.filter(apt => {
+      const aptDate = dateTimeService.formatDate(
+        dateTimeService.parseNaturalDate(apt.preferredDate)
+      );
+      return aptDate === today;
+    });
+  }
+
+  /**
+   * Obtener estadísticas de citas
+   */
+  getStats() {
+    return {
+      total: this.appointments.length,
+      pendientes: this.appointments.filter(a => a.status === 'PENDIENTE').length,
+      confirmadas: this.appointments.filter(a => a.status === 'CONFIRMADA').length,
+      canceladas: this.appointments.filter(a => a.status === 'CANCELADA').length,
+      hoy: this.getTodayAppointments().length,
+    };
   }
 }
 

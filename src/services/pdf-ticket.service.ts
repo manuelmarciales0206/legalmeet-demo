@@ -1,4 +1,5 @@
 import { CaseClassification } from './ai.service';
+import { dateTimeService } from './datetime.service';
 
 class PDFTicketService {
   /**
@@ -16,13 +17,8 @@ class PDFTicketService {
       estimated: number;
     };
   }): string {
-    const formattedDate = data.timestamp.toLocaleString('es-CO', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+    // Usar hora colombiana
+    const formattedDate = dateTimeService.formatShortDateTime(data.timestamp);
 
     const urgencyEmoji = {
       'BAJA': '🟢',
@@ -39,7 +35,7 @@ class PDFTicketService {
 ✅ CASO REGISTRADO EXITOSAMENTE
 
 📋 Radicado: ${data.radicado}
-📅 Fecha: ${formattedDate}
+📅 Fecha: ${formattedDate} (Hora Colombia)
 📱 Contacto: ${data.phoneNumber}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -86,16 +82,15 @@ Este radicado es tu referencia única.
 Guárdalo para seguimiento de tu caso.
 
 Los precios son estimados y pueden
-variar según el abogado seleccionado
-y la complejidad del caso.
+variar según el abogado seleccionado.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ✨ Gracias por confiar en LegalMeet
 
 Atención al cliente: soporte@legalmeet.co
-WhatsApp: xxx-xxx-xxxx
-`;
+WhatsApp: xxx xxx xxxx
+`.trim();
   }
 
   private formatPrice(amount: number): string {
