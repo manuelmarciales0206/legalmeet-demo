@@ -72,7 +72,7 @@ ${data.classification.descripcion}
 🔗 ACCEDE A LA PLATAFORMA
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-https://legalmeet-demo.vercel.app/dashboard
+https://legalmeet.vercel.app/dashboard
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 💡 NOTA IMPORTANTE
@@ -102,7 +102,7 @@ WhatsApp: xxx xxx xxxx
    */
   generatePDFUrl(radicado: string): string {
     // En producción esto generaría el PDF y devolvería URL
-    return `https://legalmeet-demo.vercel.app/api/pdf/${radicado}`;
+    return `https://legalmeet.vercel.app/api/pdf/${radicado}`;
   }
 }
 
