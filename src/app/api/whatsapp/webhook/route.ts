@@ -34,10 +34,10 @@ export async function POST(req: NextRequest) {
     console.log(`🆔 Message ID: ${messageId}`);
     console.log(`🎵 NumMedia: ${numMedia}`);
 
-    // Variable para almacenar el texto del mensaje (ya sea escrito o transcrito)
+    // Variable para almacenar el texto del mensaje
     let messageText = body;
 
-    // Si hay audio, transcribirlo
+    // Si hay audio, transcribirlo CON MANEJO DE ERRORES MEJORADO
     if (numMedia > 0 && mediaUrl && audioService.isAudioMessage(mediaContentType)) {
       console.log('🎙️ Mensaje de audio detectado');
       
@@ -47,37 +47,66 @@ export async function POST(req: NextRequest) {
       
       if (transcription) {
         messageText = transcription;
-        console.log(`💬 Transcripción: "${messageText}"`);
+        console.log(`💬 Transcripción exitosa: "${messageText}"`);
         
         const confirmationMessage = audioService.formatTranscriptionMessage(transcription);
         await whatsappService.sendTextMessage(phoneNumber, confirmationMessage);
       } else {
         console.error('❌ No se pudo transcribir el audio');
-        await whatsappService.sendTextMessage(
-          phoneNumber,
-          'Disculpa, no pude procesar el audio. ¿Podrías escribir tu mensaje?'
-        );
-        return NextResponse.json({ success: false, error: 'Audio transcription failed' });
+        
+        // Resetear estado si estaba en proceso de agendamiento
+        const currentState = conversationService.getState(phoneNumber);
+        if (currentState !== 'CHATTING') {
+          conversationService.setState(phoneNumber, 'CHATTING');
+          console.log('🔄 Estado reseteado por error de audio');
+        }
+        
+        // Mensaje de error más amigable
+        const errorMessage = 'Disculpa, no pude procesar tu audio. Puede ser muy largo o tener problemas de conexión.\n\n¿Podrías escribirlo en texto? 😊\n\nSi prefieres, escribe "cancelar" para reiniciar.';
+        
+        await whatsappService.sendTextMessage(phoneNumber, errorMessage);
+        
+        return NextResponse.json({ 
+          success: false, 
+          error: 'Audio transcription failed',
+          action: 'audio_failed_fallback_to_text'
+        });
       }
     }
 
-    // Obtener estado actual de la conversación
+    // Obtener estado actual
     const currentState = conversationService.getState(phoneNumber);
     console.log(`📊 Estado actual: ${currentState}`);
+
+    // COMANDO DE RESET
+    const isResetCommand = ['reiniciar', 'reset', 'cancelar', 'salir'].includes(
+      messageText.toLowerCase().trim()
+    );
+
+    if (isResetCommand) {
+      console.log('🔄 Comando de reset recibido');
+      
+      conversationService.clearConversation(phoneNumber);
+      conversationService.setState(phoneNumber, 'CHATTING');
+      
+      const response = 'Ok, reiniciamos. 😊\n\nCuéntame, ¿en qué situación legal puedo ayudarte?';
+      conversationService.addMessage(phoneNumber, 'assistant', response);
+      await whatsappService.sendTextMessage(phoneNumber, response);
+      
+      return NextResponse.json({ success: true, action: 'reset' });
+    }
 
     // MANEJO DE ESTADOS DE AGENDAMIENTO
     if (currentState === 'WAITING_APPOINTMENT_DECISION') {
       const answer = messageText.toLowerCase().trim();
       
       if (['si', 'sí', 'yes', 'claro', 'dale', 'ok'].some(word => answer.includes(word))) {
-        // Usuario quiere agendar
         conversationService.setState(phoneNumber, 'COLLECTING_NAME');
         const response = 'Perfecto! 😊 ¿Cuál es tu nombre completo?';
         conversationService.addMessage(phoneNumber, 'assistant', response);
         await whatsappService.sendTextMessage(phoneNumber, response);
         return NextResponse.json({ success: true, action: 'collecting_name' });
       } else if (['no', 'nope', 'ahora no', 'después', 'luego'].some(word => answer.includes(word))) {
-        // Usuario no quiere agendar
         conversationService.setState(phoneNumber, 'CHATTING');
         const response = 'Perfecto, sin problema. Cuando estés listo, escribe "agendar cita" y te ayudo. 👍';
         conversationService.addMessage(phoneNumber, 'assistant', response);
@@ -86,7 +115,6 @@ export async function POST(req: NextRequest) {
         setTimeout(() => conversationService.clearConversation(phoneNumber), 5000);
         return NextResponse.json({ success: true, action: 'appointment_declined' });
       } else {
-        // Respuesta ambigua
         const response = 'No entendí bien. ¿Quieres agendar una cita? Responde "sí" o "no" 😊';
         await whatsappService.sendTextMessage(phoneNumber, response);
         return NextResponse.json({ success: true, action: 'clarification_needed' });
@@ -142,7 +170,7 @@ export async function POST(req: NextRequest) {
       conversationService.setAppointmentData(phoneNumber, { preferredDate });
       conversationService.setState(phoneNumber, 'COLLECTING_TIME');
       
-      const response = 'Excelente! ¿A qué hora prefieres?\n\nEj: "2pm", "10:30am", "3 de la tarde" 🕐';
+      const response = 'Excelente! ¿A qué hora prefieres?\n\nEj: "2pm", "10:30am", "3 de la tarde" 🕐\n\n💡 También puedes enviar audio si prefieres.';
       conversationService.addMessage(phoneNumber, 'assistant', response);
       await whatsappService.sendTextMessage(phoneNumber, response);
       return NextResponse.json({ success: true, action: 'collecting_time' });
@@ -153,7 +181,6 @@ export async function POST(req: NextRequest) {
       
       conversationService.setAppointmentData(phoneNumber, { preferredTime });
       
-      // Obtener todos los datos recolectados
       const appointmentData = conversationService.getAppointmentData(phoneNumber);
       
       if (!appointmentData?.radicado || !appointmentData.userName || !appointmentData.userEmail) {
@@ -164,7 +191,6 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ success: false, error: 'Incomplete data' });
       }
 
-      // Crear la cita
       const appointment = appointmentService.createAppointment({
         radicado: appointmentData.radicado,
         phoneNumber,
@@ -176,15 +202,11 @@ export async function POST(req: NextRequest) {
         preferredTime: preferredTime,
       });
 
-      // Generar y enviar confirmación
       const confirmationMessage = appointmentService.generateConfirmationMessage(appointment);
       await whatsappService.sendTextMessage(phoneNumber, confirmationMessage);
       conversationService.addMessage(phoneNumber, 'assistant', confirmationMessage);
 
-      // Limpiar después de 10 segundos
-      setTimeout(() => {
-        conversationService.clearConversation(phoneNumber);
-      }, 10000);
+      setTimeout(() => conversationService.clearConversation(phoneNumber), 10000);
 
       console.log('✅ Cita agendada exitosamente');
       return NextResponse.json({ 
@@ -196,7 +218,13 @@ export async function POST(req: NextRequest) {
 
     // FLUJO NORMAL DE CONVERSACIÓN
     if (!messageText || messageText.trim() === '') {
-      const welcomeMessage = `¡Hola! 👋 Soy tu asistente legal de LegalMeet.\n\nCuéntame, ¿qué situación legal estás enfrentando?\n\n💡 Puedes escribir o enviarme un audio, como prefieras.`;
+      const welcomeMessage = `¡Hola! 👋 Soy tu asistente legal de LegalMeet.
+
+Cuéntame, ¿qué situación legal estás enfrentando?
+
+💡 Puedes escribir o enviar audio corto (máximo 30 segundos)
+
+Si algo falla, escribe "cancelar" para reiniciar.`;
       
       conversationService.addMessage(phoneNumber, 'assistant', welcomeMessage);
       await whatsappService.sendTextMessage(phoneNumber, welcomeMessage);
@@ -212,7 +240,13 @@ export async function POST(req: NextRequest) {
       conversationService.clearConversation(phoneNumber);
       conversationService.setState(phoneNumber, 'CHATTING');
       
-      const welcomeMessage = `¡Hola! 👋 Soy tu asistente legal de LegalMeet.\n\nCuéntame, ¿qué situación legal estás enfrentando?\n\n💡 Puedes escribir o enviarme un audio, como prefieras.`;
+      const welcomeMessage = `¡Hola! 👋 Soy tu asistente legal de LegalMeet.
+
+Cuéntame, ¿qué situación legal estás enfrentando?
+
+💡 Puedes escribir o enviar audio corto (máximo 30 segundos)
+
+Si algo falla, escribe "cancelar" para reiniciar.`;
       
       conversationService.addMessage(phoneNumber, 'assistant', welcomeMessage);
       await whatsappService.sendTextMessage(phoneNumber, welcomeMessage);
@@ -220,13 +254,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, action: 'welcome' });
     }
 
-    // Agregar mensaje del usuario
     conversationService.addMessage(phoneNumber, 'user', messageText);
     
     const messages = conversationService.getMessages(phoneNumber);
     console.log(`📊 Total mensajes: ${messages.length}`);
     
-    // Verificar si hay suficiente información para clasificar
     if (aiService.hasEnoughInformation(messages)) {
       console.log('✅ Suficiente información, clasificando caso...');
       
@@ -258,27 +290,22 @@ export async function POST(req: NextRequest) {
           estimatedCost,
         });
         
-        // Enviar ticket
         await whatsappService.sendTextMessage(phoneNumber, ticketContent);
         conversationService.addMessage(phoneNumber, 'assistant', ticketContent);
         
-        // Pequeña pausa antes de preguntar por la cita
         await new Promise(resolve => setTimeout(resolve, 2000));
         
-        // Preguntar si quiere agendar cita
         const appointmentQuestion = `¿Te gustaría agendar una cita con un abogado especializado en ${classification.categoria}? 📅\n\nResponde "sí" o "no"`;
         
         conversationService.addMessage(phoneNumber, 'assistant', appointmentQuestion);
         await whatsappService.sendTextMessage(phoneNumber, appointmentQuestion);
         
-        // Guardar datos del caso para la cita
         conversationService.setAppointmentData(phoneNumber, {
           radicado,
           categoria: classification.categoria,
           urgencia: classification.urgencia,
         });
         
-        // Cambiar estado a esperar decisión
         conversationService.setState(phoneNumber, 'WAITING_APPOINTMENT_DECISION');
         
         return NextResponse.json({ 
@@ -290,7 +317,6 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Generar respuesta con IA
     console.log('🤖 Generando respuesta con IA...');
     const aiResponse = await aiService.generateResponse(messages);
     
@@ -318,15 +344,16 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ 
     status: 'ok',
     service: 'LegalMeet WhatsApp Webhook',
-    version: '3.0.0',
+    version: '3.1.0',
     features: [
       'AI Classification',
       'Unique Radicado',
       'Price Estimation',
       'Professional Ticket',
       'Analytics Tracking',
-      '🎙️ Audio Transcription',
-      '📅 Appointment Scheduling'
+      '🎙️ Audio Transcription (Optimized)',
+      '📅 Appointment Scheduling',
+      '🔄 Auto-recovery from stuck states'
     ],
     timestamp: new Date().toISOString(),
   });

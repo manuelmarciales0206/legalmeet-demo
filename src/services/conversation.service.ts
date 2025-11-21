@@ -66,6 +66,7 @@ class ConversationService {
   setState(phoneNumber: string, state: ConversationState): void {
     const conversation = this.getConversation(phoneNumber);
     conversation.state = state;
+    conversation.lastMessageAt = new Date();
     this.conversations.set(phoneNumber, conversation);
     console.log(`🔄 Estado cambiado a: ${state}`);
   }
@@ -100,6 +101,9 @@ class ConversationService {
     return !conversation || conversation.messages.length === 0;
   }
 
+  /**
+   * Limpiar conversaciones antiguas (más de 1 hora)
+   */
   cleanOldConversations(): void {
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
     let cleaned = 0;
@@ -113,6 +117,31 @@ class ConversationService {
     
     if (cleaned > 0) {
       console.log(`🧹 Limpiadas ${cleaned} conversaciones antiguas`);
+    }
+  }
+
+  /**
+   * Resetear conversaciones colgadas (más de 5 minutos en estado no-CHATTING)
+   */
+  cleanStuckConversations(): void {
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+    let cleaned = 0;
+    
+    for (const [phoneNumber, conversation] of this.conversations.entries()) {
+      // Si lleva más de 5 minutos en un estado que no es CHATTING
+      if (
+        conversation.state !== 'CHATTING' && 
+        conversation.lastMessageAt < fiveMinutesAgo
+      ) {
+        console.log(`⚠️ Conversación colgada detectada: ${phoneNumber} en estado ${conversation.state}`);
+        conversation.state = 'CHATTING';
+        this.conversations.set(phoneNumber, conversation);
+        cleaned++;
+      }
+    }
+    
+    if (cleaned > 0) {
+      console.log(`🧹 Reseteadas ${cleaned} conversaciones colgadas`);
     }
   }
 
@@ -132,8 +161,15 @@ class ConversationService {
 
 export const conversationService = new ConversationService();
 
+// Auto-limpieza en servidor
 if (typeof window === 'undefined') {
+  // Limpiar conversaciones antiguas cada 10 minutos
   setInterval(() => {
     conversationService.cleanOldConversations();
   }, 10 * 60 * 1000);
+  
+  // Limpiar conversaciones colgadas cada 2 minutos
+  setInterval(() => {
+    conversationService.cleanStuckConversations();
+  }, 2 * 60 * 1000);
 }
